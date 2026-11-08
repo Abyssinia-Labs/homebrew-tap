@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+# bin/bump [--check] [VERSION]
+#
+# Writes Formula/latem.rb for a latem release, from that release's checksums
+# manifest, and only once the manifest's minisign signature verifies against
+# latem.pub: the key compiled into every latem binary
+# (internal/selfupdate/trusted.pub in Abyssinia-Labs/latem). So no sha256 in
+# the formula is one the release key did not sign, and Homebrew's own check of
+# each download against it finishes the chain install.sh and `latem update`
+# check on every machine.
+#
+# With no VERSION, the latest release. --check writes nothing, and prints the
+# version a bump would write, or nothing when the formula is already at it.
+set -euo pipefail
+
+repo=Abyssinia-Labs/latem
+# The first release that knows it can be Homebrew's (RUNNER_SPEC A78). One
+# before it would write a release into its keg on `latem update`, and point its
+# service at a keg the next `brew upgrade` deletes.
+floor=${BUMP_FLOOR:-0.3.1}
+
+here=$(cd "$(dirname "$0")/.." && pwd)
+formula=$here/Formula/latem.rb
+pubkey=$here/latem.pub
+
+check=false
+if [ "${1:-}" = --check ]; then
+  check=true
+  shift
+fi
+
+tag=${1:-}
+if [ -z "$tag" ]; then
+  tag=$(gh release view --repo "$repo" --json tagName --jq .tagName)
+fi
+tag=v${tag#v}
+bare=${tag#v}
+if ! printf '%s' "$bare" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+  echo "bump: $tag is not a vMAJOR.MINOR.PATCH release" >&2
+  exit 1
+fi
+
+# newer A B: A is a later version than B.
+newer() {
+  [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n 1)" = "$1" ]
+}
+
+current=""
+if [ -f "$formula" ]; then
+  # Homebrew reads the version from the URL, and its audit refuses a
+  # version line that repeats it, so this does too.
+  current=$(sed -n 's|.*/releases/download/v\([0-9.]*\)/.*|\1|p' "$formula" | head -n 1)
+fi
+if [ "$bare" = "$current" ]; then
+  $check || echo "bump: the formula is already latem $bare"
+  exit 0
+fi
+if [ -n "$current" ] && ! newer "$bare" "$current"; then
+  echo "bump: latem $bare is older than the formula's $current; a tap does not go back" >&2
+  exit 1
+fi
+if [ "$bare" != "$floor" ] && ! newer "$bare" "$floor"; then
+  echo "bump: latem $bare predates $floor, the first release that is safe to install with Homebrew" >&2
+  # Nothing to do yet, not a failure: the hourly check runs before the first
+  # such release exists.
+  $check && exit 0
+  exit 1
+fi
+if $check; then
+  echo "$bare"
+  exit 0
+fi
+
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+sums=latem_${bare}_checksums.txt
+base=https://github.com/$repo/releases/download/$tag
+curl -fsSL --retry 3 -o "$work/$sums" "$base/$sums"
+curl -fsSL --retry 3 -o "$work/$sums.minisig" "$base/$sums.minisig"
+
+# -Q prints the trusted comment, and only once both signatures verify. The
+# comment is signed too, and release.yml writes the tag into it.
+comment=$(minisign -V -Q -p "$pubkey" -m "$work/$sums" -x "$work/$sums.minisig")
+if [ "$comment" != "latem $tag" ]; then
+  echo "bump: $sums is signed with the comment \"$comment\", not \"latem $tag\"" >&2
+  exit 1
+fi
+
+# sha OS_ARCH: the signed sha256 of that platform's archive. The asset name
+# carries the version, so a manifest signed for another release has no line
+# for it (the relabelling RUNNER_SPEC §20 refuses).
+sha() {
+  local name=latem_${bare}_$1.tar.gz sum
+  sum=$(awk -v n="$name" '$2 == n || $2 == "*" n { print $1 }' "$work/$sums")
+  if ! printf '%s' "$sum" | grep -Eq '^[0-9a-f]{64}$'; then
+    echo "bump: $sums signs no single sha256 for $name" >&2
+    return 1
+  fi
+  printf '%s' "$sum"
+}
+darwin_arm64=$(sha darwin_arm64)
+darwin_amd64=$(sha darwin_amd64)
+linux_arm64=$(sha linux_arm64)
+linux_amd64=$(sha linux_amd64)
+keyid=$(sed -n 's/^untrusted comment: minisign public key //p' "$pubkey")
+
+mkdir -p "$(dirname "$formula")"
+# Quoted, with placeholders filled in after: the formula is Ruby, whose
+# #{...} and backticks a shell heredoc would otherwise rewrite.
+cat > "$formula.tmp" <<'EOF'
+# Written by bin/bump from latem __TAG__'s checksums, signed by latem's
+# release key __KEYID__. Change bin/bump, not this file.
+class Latem < Formula
+  desc "Self-hosted CI runner with first-class mobile builds"
+  homepage "https://latem.dev"
+  license "Apache-2.0"
+
+  livecheck do
+    url :stable
+    strategy :github_latest
+  end
+
+  on_macos do
+    on_arm do
+      url "__BASE__/latem___BARE___darwin_arm64.tar.gz"
+      sha256 "__DARWIN_ARM64__"
+    end
+    on_intel do
+      url "__BASE__/latem___BARE___darwin_amd64.tar.gz"
+      sha256 "__DARWIN_AMD64__"
+    end
+  end
+
+  on_linux do
+    on_arm do
+      url "__BASE__/latem___BARE___linux_arm64.tar.gz"
+      sha256 "__LINUX_ARM64__"
+    end
+    on_intel do
+      url "__BASE__/latem___BARE___linux_amd64.tar.gz"
+      sha256 "__LINUX_AMD64__"
+    end
+  end
+
+  def install
+    bin.install "latem"
+    generate_completions_from_executable(bin/"latem", shell_parameter_format: :cobra)
+  end
+
+  def caveats
+    <<~EOS
+      To make this machine a runner:
+        latem setup
+
+      The service it installs starts #{opt_bin}/latem, which `brew upgrade`
+      keeps current, and the running agent moves onto each new version the
+      first moment no build is in flight.
+    EOS
+  end
+
+  test do
+    assert_equal "v#{version}", shell_output("#{bin}/latem version --short").strip
+    # It knows the keg is Homebrew's, and will not write a release into it.
+    assert_match "brew upgrade latem", shell_output("#{bin}/latem update 2>&1", 1)
+  end
+end
+EOF
+sed -e "s|__TAG__|$tag|g" -e "s|__KEYID__|$keyid|g" -e "s|__BARE__|$bare|g" -e "s|__BASE__|$base|g" \
+  -e "s|__DARWIN_ARM64__|$darwin_arm64|g" -e "s|__DARWIN_AMD64__|$darwin_amd64|g" \
+  -e "s|__LINUX_ARM64__|$linux_arm64|g" -e "s|__LINUX_AMD64__|$linux_amd64|g" \
+  "$formula.tmp" > "$formula"
+rm "$formula.tmp"
+echo "bump: wrote latem $bare to Formula/latem.rb"

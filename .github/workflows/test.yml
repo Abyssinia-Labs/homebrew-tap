@@ -1,0 +1,41 @@
+# Install, test and audit the formula as committed, on a change somebody
+# pushes or proposes. bump.yml runs the same check before its own pushes.
+
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  formula:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_ANALYTICS: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+    steps:
+      - uses: actions/checkout@v5
+      - name: install and test it
+        run: |
+          set -euo pipefail
+          if [ ! -f Formula/latem.rb ]; then
+            echo "no formula yet: bump.yml writes one from the first release that is safe under Homebrew"
+            exit 0
+          fi
+          if [ "$RUNNER_OS" = Linux ]; then
+            export PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:$PATH"
+          fi
+          brew tap abyssinia-labs/tap "$GITHUB_WORKSPACE"
+          brew style abyssinia-labs/tap/latem
+          brew install abyssinia-labs/tap/latem
+          brew test abyssinia-labs/tap/latem
+          brew audit --strict --online abyssinia-labs/tap/latem
