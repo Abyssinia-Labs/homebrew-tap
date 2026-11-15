@@ -1,4 +1,4 @@
-# Written by bin/bump from latem v0.10.0's checksums, signed by latem's
+# Written by bin/bump from latem v0.11.0's checksums, signed by latem's
 # release key D73938C642AD64D3. Change bin/bump, not this file.
 class Latem < Formula
   desc "Self-hosted CI runner with first-class mobile builds"
@@ -12,23 +12,23 @@ class Latem < Formula
 
   on_macos do
     on_arm do
-      url "https://github.com/Abyssinia-Labs/latem/releases/download/v0.10.0/latem_0.10.0_darwin_arm64.tar.gz"
-      sha256 "61788f03847b33d588615c5d946b02390b3e673dd70c4e7714babdee43589bf4"
+      url "https://github.com/Abyssinia-Labs/latem/releases/download/v0.11.0/latem_0.11.0_darwin_arm64.tar.gz"
+      sha256 "55839f139fe900e45932f17a449074fe65f84482a4345c5d4118ab6c48917dc9"
     end
     on_intel do
-      url "https://github.com/Abyssinia-Labs/latem/releases/download/v0.10.0/latem_0.10.0_darwin_amd64.tar.gz"
-      sha256 "065543167b616a7bfd60772c757ee9cb83ef9602bc440abc0a7b6d1979aca47f"
+      url "https://github.com/Abyssinia-Labs/latem/releases/download/v0.11.0/latem_0.11.0_darwin_amd64.tar.gz"
+      sha256 "3fad08fa3b96be83caa51ca1f229d7232ce41168c38395d694c09747956b6019"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/Abyssinia-Labs/latem/releases/download/v0.10.0/latem_0.10.0_linux_arm64.tar.gz"
-      sha256 "530786ebf40839da6dc42804a5d7d7b7599efe2f463ff2b008ec31277162ac37"
+      url "https://github.com/Abyssinia-Labs/latem/releases/download/v0.11.0/latem_0.11.0_linux_arm64.tar.gz"
+      sha256 "4fc9225c5ea8008fb8e278f600c57d33d0f36ce9978333040f439cdc8f62ebd7"
     end
     on_intel do
-      url "https://github.com/Abyssinia-Labs/latem/releases/download/v0.10.0/latem_0.10.0_linux_amd64.tar.gz"
-      sha256 "2045178d0b4b35bfc2ea5274a1bb9fa3ff8c63248ffb70e40c71c917d3b324d4"
+      url "https://github.com/Abyssinia-Labs/latem/releases/download/v0.11.0/latem_0.11.0_linux_amd64.tar.gz"
+      sha256 "500af1d9e602da429b6e8bc9bd98d6c340bb228a1967b273e1eba352db35784c"
     end
   end
 
