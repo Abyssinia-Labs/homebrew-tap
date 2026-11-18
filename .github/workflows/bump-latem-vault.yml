@@ -87,8 +87,8 @@ jobs:
           brew test abyssinia-labs/tap/latem-vault
           brew audit --strict --online abyssinia-labs/tap/latem-vault
           "$(brew --prefix)/bin/latem-vault" --version
-          "$(brew --prefix)/bin/vault" --version
           "$(brew --prefix)/bin/lv" --version
+          "$(brew --prefix)/bin/vlt" --version
           "$(brew --prefix)/bin/openvault" --version
 
   publish:

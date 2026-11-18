@@ -53,9 +53,9 @@ hourly, tests the formula on macOS and Linux, and pushes it:
 gh workflow run bump-latem-vault.yml --repo Abyssinia-Labs/homebrew-tap
 ```
 
-It also links `vault` and `lv` to `latem-vault`, as latem's formula links
-`ltm`: short names to type. HashiCorp Vault has a `vault` command too, so where
-both are installed, `lv` is the one that is always latem vault. A change to
+It also links `lv` and `vlt` to `latem-vault`, as latem's formula links
+`ltm`: short names to type. homebrew-core's `lv`, a pager, has an `lv` command
+too, so the formula conflicts with it, and `vlt` always works. A change to
 what the formula installs, with no new release, goes in with
 `bin/bump-latem-vault --revise`, which raises its `revision` so `brew upgrade`
 reinstalls it.

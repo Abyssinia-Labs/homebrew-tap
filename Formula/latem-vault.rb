@@ -2,7 +2,7 @@
 # by latem vault's release key 3AE5705FBEDAB5B2. Change bin/bump-latem-vault, not this file.
 class LatemVault < Formula
   # latem-vault's short names, linked to it.
-  SHORT_NAMES = %w[vault lv].freeze
+  SHORT_NAMES = %w[lv vlt].freeze
 
   desc "Encrypted secrets, variables and files synced across your own devices"
   homepage "https://github.com/Abyssinia-Labs/latem-vault"
@@ -36,6 +36,8 @@ class LatemVault < Formula
     end
   end
 
+  conflicts_with "lv", because: "both install an `lv` command"
+
   def install
     bin.install "latem-vault"
     # Short names, as latem has ltm. The binary keeps its name: latem looks
@@ -54,10 +56,9 @@ class LatemVault < Formula
 
   def caveats
     <<~EOS
-      vault and lv are short names for latem-vault: `lv devices` runs
-      `latem-vault devices`.
-      HashiCorp Vault has a vault command too. Where both are on PATH, lv is
-      always latem vault; Homebrew won't link both formulae.
+      lv and vlt are short names for latem-vault: `lv devices` runs
+      `latem-vault devices`. vlt always works, even where another lv comes
+      first on PATH.
 
       OpenVault is now latem vault. To move a vault from ~/.openvault to
       ~/.latem-vault, update latem to 0.12.0 or later, then run:
