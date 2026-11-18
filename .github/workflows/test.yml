@@ -17,25 +17,27 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-15, ubuntu-24.04]
+        formula: [latem, latem-vault]
     runs-on: ${{ matrix.os }}
     env:
       HOMEBREW_NO_AUTO_UPDATE: "1"
       HOMEBREW_NO_ANALYTICS: "1"
       HOMEBREW_NO_INSTALL_CLEANUP: "1"
+      FORMULA: ${{ matrix.formula }}
     steps:
       - uses: actions/checkout@v5
       - name: install and test it
         run: |
           set -euo pipefail
-          if [ ! -f Formula/latem.rb ]; then
-            echo "no formula yet: bump.yml writes one from the first release that is safe under Homebrew"
+          if [ ! -f "Formula/$FORMULA.rb" ]; then
+            echo "no $FORMULA formula yet: its bump workflow writes one from its first release"
             exit 0
           fi
           if [ "$RUNNER_OS" = Linux ]; then
             export PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:$PATH"
           fi
           brew tap abyssinia-labs/tap "$GITHUB_WORKSPACE"
-          brew style abyssinia-labs/tap/latem
-          brew install abyssinia-labs/tap/latem
-          brew test abyssinia-labs/tap/latem
-          brew audit --strict --online abyssinia-labs/tap/latem
+          brew style "abyssinia-labs/tap/$FORMULA"
+          brew install "abyssinia-labs/tap/$FORMULA"
+          brew test "abyssinia-labs/tap/$FORMULA"
+          brew audit --strict --online "abyssinia-labs/tap/$FORMULA"
