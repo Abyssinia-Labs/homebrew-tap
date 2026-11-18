@@ -189,6 +189,10 @@ __REVISION__
       `latem-vault devices`. vlt always works, even where another lv comes
       first on PATH.
 
+      A service installed by 0.6.0 starts this version's keg, which brew
+      upgrade removes: run `lv service install` after each upgrade until a
+      later release, which starts it through #{opt_bin} instead.
+
       OpenVault is now latem vault. To move a vault from ~/.openvault to
       ~/.latem-vault, update latem to 0.12.0 or later, then run:
         latem-vault service install
