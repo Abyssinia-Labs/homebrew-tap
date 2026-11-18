@@ -53,6 +53,13 @@ hourly, tests the formula on macOS and Linux, and pushes it:
 gh workflow run bump-latem-vault.yml --repo Abyssinia-Labs/homebrew-tap
 ```
 
+It also links `vault` and `lv` to `latem-vault`, as latem's formula links
+`ltm`: short names to type. HashiCorp Vault has a `vault` command too, so where
+both are installed, `lv` is the one that is always latem vault. A change to
+what the formula installs, with no new release, goes in with
+`bin/bump-latem-vault --revise`, which raises its `revision` so `brew upgrade`
+reinstalls it.
+
 For 0.6, the release that renamed OpenVault, the formula also installs an
 `openvault` command that says the new name and runs `latem-vault`. OV-15 takes
 it out. When latem vault's key is rotated, `latem-vault.pub` changes here

@@ -4,6 +4,7 @@ class LatemVault < Formula
   desc "Encrypted secrets, variables and files synced across your own devices"
   homepage "https://github.com/Abyssinia-Labs/latem-vault"
   license any_of: ["Apache-2.0", "MIT"]
+  revision 1
 
   livecheck do
     url :stable
@@ -34,6 +35,10 @@ class LatemVault < Formula
 
   def install
     bin.install "latem-vault"
+    # Short names, as latem has ltm. The binary keeps its name: latem looks
+    # it up as latem-vault.
+    bin.install_symlink "latem-vault" => "vault"
+    bin.install_symlink "latem-vault" => "lv"
     # OpenVault's old command, for scripts that still call it: it says the
     # new name, then runs it. For the release that renamed it only; OV-15
     # takes it out.
@@ -47,6 +52,11 @@ class LatemVault < Formula
 
   def caveats
     <<~EOS
+      vault and lv are short names for latem-vault: `lv devices` runs
+      `latem-vault devices`.
+      HashiCorp Vault has a vault command too. Where both are on PATH, lv is
+      always latem vault; Homebrew won't link both formulae.
+
       OpenVault is now latem vault. To move a vault from ~/.openvault to
       ~/.latem-vault, update latem to 0.12.0 or later, then run:
         latem-vault service install
@@ -55,6 +65,8 @@ class LatemVault < Formula
 
   test do
     assert_match "latem-vault #{version} (", shell_output("#{bin}/latem-vault --version")
+    assert_match "latem-vault #{version} (", shell_output("#{bin}/vault --version")
+    assert_match "latem-vault #{version} (", shell_output("#{bin}/lv --version")
     old = shell_output("#{bin}/openvault --version 2>&1")
     assert_match "openvault is now latem-vault", old
     assert_match "latem-vault #{version} (", old
