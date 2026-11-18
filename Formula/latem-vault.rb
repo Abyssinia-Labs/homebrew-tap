@@ -1,6 +1,9 @@
 # Written by bin/bump-latem-vault from latem vault v0.6.0's checksums, signed
 # by latem vault's release key 3AE5705FBEDAB5B2. Change bin/bump-latem-vault, not this file.
 class LatemVault < Formula
+  # latem-vault's short names, linked to it.
+  SHORT_NAMES = %w[vault lv].freeze
+
   desc "Encrypted secrets, variables and files synced across your own devices"
   homepage "https://github.com/Abyssinia-Labs/latem-vault"
   license any_of: ["Apache-2.0", "MIT"]
@@ -36,9 +39,8 @@ class LatemVault < Formula
   def install
     bin.install "latem-vault"
     # Short names, as latem has ltm. The binary keeps its name: latem looks
-    # it up as latem-vault.
-    bin.install_symlink "latem-vault" => "vault"
-    bin.install_symlink "latem-vault" => "lv"
+    # it up as latem-vault. The caveats name them too.
+    SHORT_NAMES.each { |name| bin.install_symlink "latem-vault" => name }
     # OpenVault's old command, for scripts that still call it: it says the
     # new name, then runs it. For the release that renamed it only; OV-15
     # takes it out.
@@ -65,8 +67,9 @@ class LatemVault < Formula
 
   test do
     assert_match "latem-vault #{version} (", shell_output("#{bin}/latem-vault --version")
-    assert_match "latem-vault #{version} (", shell_output("#{bin}/vault --version")
-    assert_match "latem-vault #{version} (", shell_output("#{bin}/lv --version")
+    SHORT_NAMES.each do |name|
+      assert_match "latem-vault #{version} (", shell_output("#{bin}/#{name} --version")
+    end
     old = shell_output("#{bin}/openvault --version 2>&1")
     assert_match "openvault is now latem-vault", old
     assert_match "latem-vault #{version} (", old
