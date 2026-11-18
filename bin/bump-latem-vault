@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # bin/bump-latem-vault [--check] [VERSION]
+# bin/bump-latem-vault --revise
 #
 # Writes Formula/latem-vault.rb for a latem vault release, from that release's
 # checksums manifest, and only once the manifest's minisign signature verifies
@@ -10,6 +11,11 @@
 #
 # With no VERSION, the latest release. --check writes nothing, and prints the
 # version a bump would write, or nothing when the formula is already at it.
+#
+# --revise writes the formula again at the version it already has, verified
+# the same way, with its revision one higher, so `brew upgrade` reinstalls the
+# same release. Use it after changing what the formula installs. A new version
+# starts again with no revision.
 set -euo pipefail
 
 repo=Abyssinia-Labs/latem-vault
@@ -21,12 +27,36 @@ formula=$here/Formula/latem-vault.rb
 pubkey=$here/latem-vault.pub
 
 check=false
-if [ "${1:-}" = --check ]; then
-  check=true
-  shift
+revise=false
+case "${1:-}" in
+  --check)
+    check=true
+    shift
+    ;;
+  --revise)
+    revise=true
+    shift
+    ;;
+esac
+
+current=""
+revision=0
+if [ -f "$formula" ]; then
+  # Homebrew reads the version from the URL, and its audit refuses a
+  # version line that repeats it, so this does too.
+  current=$(sed -n 's|.*/releases/download/v\([0-9.]*\)/.*|\1|p' "$formula" | head -n 1)
 fi
 
 tag=${1:-}
+if $revise; then
+  if [ -z "$current" ] || [ -n "$tag" ]; then
+    echo "bump-latem-vault: --revise takes no version, and needs a formula to revise" >&2
+    exit 1
+  fi
+  tag=$current
+  revision=$(sed -n 's/^  revision \([0-9][0-9]*\)$/\1/p' "$formula")
+  revision=$((${revision:-0} + 1))
+fi
 if [ -z "$tag" ]; then
   tag=$(gh release view --repo "$repo" --json tagName --jq .tagName)
 fi
@@ -42,17 +72,11 @@ newer() {
   [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n 1)" = "$1" ]
 }
 
-current=""
-if [ -f "$formula" ]; then
-  # Homebrew reads the version from the URL, and its audit refuses a
-  # version line that repeats it, so this does too.
-  current=$(sed -n 's|.*/releases/download/v\([0-9.]*\)/.*|\1|p' "$formula" | head -n 1)
-fi
-if [ "$bare" = "$current" ]; then
+if [ "$bare" = "$current" ] && ! $revise; then
   $check || echo "bump-latem-vault: the formula is already latem-vault $bare"
   exit 0
 fi
-if [ -n "$current" ] && ! newer "$bare" "$current"; then
+if [ -n "$current" ] && ! $revise && ! newer "$bare" "$current"; then
   echo "bump-latem-vault: $bare is older than the formula's $current; a tap does not go back" >&2
   exit 1
 fi
@@ -106,9 +130,13 @@ cat > "$formula.tmp" <<'EOF'
 # Written by bin/bump-latem-vault from latem vault __TAG__'s checksums, signed
 # by latem vault's release key __KEYID__. Change bin/bump-latem-vault, not this file.
 class LatemVault < Formula
+  # latem-vault's short names, linked to it.
+  SHORT_NAMES = %w[lv vlt].freeze
+
   desc "Encrypted secrets, variables and files synced across your own devices"
   homepage "https://github.com/Abyssinia-Labs/latem-vault"
   license any_of: ["Apache-2.0", "MIT"]
+__REVISION__
 
   livecheck do
     url :stable
@@ -137,8 +165,13 @@ class LatemVault < Formula
     end
   end
 
+  conflicts_with "lv", because: "both install an `lv` command"
+
   def install
     bin.install "latem-vault"
+    # Short names, as latem has ltm. The binary keeps its name: latem looks
+    # it up as latem-vault. The caveats name them too.
+    SHORT_NAMES.each { |name| bin.install_symlink "latem-vault" => name }
     # OpenVault's old command, for scripts that still call it: it says the
     # new name, then runs it. For the release that renamed it only; OV-15
     # takes it out.
@@ -152,6 +185,10 @@ class LatemVault < Formula
 
   def caveats
     <<~EOS
+      lv and vlt are short names for latem-vault: `lv devices` runs
+      `latem-vault devices`. vlt always works, even where another lv comes
+      first on PATH.
+
       OpenVault is now latem vault. To move a vault from ~/.openvault to
       ~/.latem-vault, update latem to 0.12.0 or later, then run:
         latem-vault service install
@@ -160,6 +197,9 @@ class LatemVault < Formula
 
   test do
     assert_match "latem-vault #{version} (", shell_output("#{bin}/latem-vault --version")
+    SHORT_NAMES.each do |name|
+      assert_match "latem-vault #{version} (", shell_output("#{bin}/#{name} --version")
+    end
     old = shell_output("#{bin}/openvault --version 2>&1")
     assert_match "openvault is now latem-vault", old
     assert_match "latem-vault #{version} (", old
@@ -169,6 +209,15 @@ EOF
 sed -e "s|__TAG__|$tag|g" -e "s|__KEYID__|$keyid|g" -e "s|__BARE__|$bare|g" -e "s|__BASE__|$base|g" \
   -e "s|__DARWIN_ARM64__|$darwin_arm64|g" -e "s|__DARWIN_AMD64__|$darwin_amd64|g" \
   -e "s|__LINUX_ARM64__|$linux_arm64|g" -e "s|__LINUX_AMD64__|$linux_amd64|g" \
-  "$formula.tmp" > "$formula"
-rm "$formula.tmp"
-echo "bump-latem-vault: wrote latem-vault $bare to Formula/latem-vault.rb"
+  "$formula.tmp" > "$formula.new"
+if [ "$revision" -gt 0 ]; then
+  sed "s|^__REVISION__$|  revision $revision|" "$formula.new" > "$formula"
+else
+  sed '/^__REVISION__$/d' "$formula.new" > "$formula"
+fi
+rm "$formula.tmp" "$formula.new"
+if [ "$revision" -gt 0 ]; then
+  echo "bump-latem-vault: wrote latem-vault $bare, revision $revision, to Formula/latem-vault.rb"
+else
+  echo "bump-latem-vault: wrote latem-vault $bare to Formula/latem-vault.rb"
+fi

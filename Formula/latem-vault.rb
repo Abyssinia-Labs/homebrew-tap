@@ -1,9 +1,13 @@
 # Written by bin/bump-latem-vault from latem vault v0.6.0's checksums, signed
 # by latem vault's release key 3AE5705FBEDAB5B2. Change bin/bump-latem-vault, not this file.
 class LatemVault < Formula
+  # latem-vault's short names, linked to it.
+  SHORT_NAMES = %w[lv vlt].freeze
+
   desc "Encrypted secrets, variables and files synced across your own devices"
   homepage "https://github.com/Abyssinia-Labs/latem-vault"
   license any_of: ["Apache-2.0", "MIT"]
+  revision 1
 
   livecheck do
     url :stable
@@ -32,8 +36,13 @@ class LatemVault < Formula
     end
   end
 
+  conflicts_with "lv", because: "both install an `lv` command"
+
   def install
     bin.install "latem-vault"
+    # Short names, as latem has ltm. The binary keeps its name: latem looks
+    # it up as latem-vault. The caveats name them too.
+    SHORT_NAMES.each { |name| bin.install_symlink "latem-vault" => name }
     # OpenVault's old command, for scripts that still call it: it says the
     # new name, then runs it. For the release that renamed it only; OV-15
     # takes it out.
@@ -47,6 +56,10 @@ class LatemVault < Formula
 
   def caveats
     <<~EOS
+      lv and vlt are short names for latem-vault: `lv devices` runs
+      `latem-vault devices`. vlt always works, even where another lv comes
+      first on PATH.
+
       OpenVault is now latem vault. To move a vault from ~/.openvault to
       ~/.latem-vault, update latem to 0.12.0 or later, then run:
         latem-vault service install
@@ -55,6 +68,9 @@ class LatemVault < Formula
 
   test do
     assert_match "latem-vault #{version} (", shell_output("#{bin}/latem-vault --version")
+    SHORT_NAMES.each do |name|
+      assert_match "latem-vault #{version} (", shell_output("#{bin}/#{name} --version")
+    end
     old = shell_output("#{bin}/openvault --version 2>&1")
     assert_match "openvault is now latem-vault", old
     assert_match "latem-vault #{version} (", old
