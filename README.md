@@ -3,6 +3,8 @@
 ```sh
 brew install abyssinia-labs/tap/latem
 latem setup
+
+brew install abyssinia-labs/tap/latem-vault
 ```
 
 [latem](https://github.com/Abyssinia-Labs/latem) runs your CI on machines you
@@ -35,3 +37,23 @@ gh workflow run bump.yml --repo Abyssinia-Labs/homebrew-tap
 
 When latem's signing key is rotated, `latem.pub` changes in the same release
 (latem's `docs/release.md`, §2).
+
+## latem vault
+
+[latem vault](https://github.com/Abyssinia-Labs/latem-vault) keeps secrets,
+variables and files encrypted on your own devices. `Formula/latem-vault.rb`
+installs a release's own archive, for the same four platforms, the same way:
+[`bin/bump-latem-vault`](bin/bump-latem-vault) verifies the release's
+checksums manifest against [`latem-vault.pub`](latem-vault.pub), latem vault's
+own release key (`3AE5705FBEDAB5B2`, not latem's), before it writes a sha256.
+[`bump-latem-vault.yml`](.github/workflows/bump-latem-vault.yml) runs it
+hourly, tests the formula on macOS and Linux, and pushes it:
+
+```sh
+gh workflow run bump-latem-vault.yml --repo Abyssinia-Labs/homebrew-tap
+```
+
+For 0.6, the release that renamed OpenVault, the formula also installs an
+`openvault` command that says the new name and runs `latem-vault`. OV-15 takes
+it out. When latem vault's key is rotated, `latem-vault.pub` changes here
+before the first release the new key signs (latem-vault's `docs/release.md`).

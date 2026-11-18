@@ -1,0 +1,111 @@
+# Write Formula/latem-vault.rb for the latest latem vault release, test it on
+# macOS and Linux, and push it. bump.yml does the same for latem.
+#
+# bin/bump-latem-vault verifies the release's checksums manifest against
+# latem-vault.pub before it writes a single sha256, so the formula only
+# carries what latem vault's release key signed. The hourly check is one
+# GitHub API call and exits; the test and publish jobs run only when there is
+# a release to write.
+#
+# Pushes made with GITHUB_TOKEN start no workflow, so test.yml never sees this
+# job's commit: the test job below is that check, run before the push.
+
+name: bump-latem-vault
+
+on:
+  schedule:
+    - cron: "53 * * * *"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release to write, e.g. v0.6.1 (default: the latest)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  # bump.yml's group: both push to main, so they take turns.
+  group: bump
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: echo "version=$(bin/bump-latem-vault --check ${VERSION:+"$VERSION"})" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: check
+    if: needs.check.outputs.version != ''
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_ANALYTICS: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: brew and minisign
+        run: |
+          set -euo pipefail
+          if [ "$RUNNER_OS" = Linux ]; then
+            # The runner image has Homebrew, off PATH.
+            printf '%s\n' /home/linuxbrew/.linuxbrew/bin /home/linuxbrew/.linuxbrew/sbin >> "$GITHUB_PATH"
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq minisign
+          else
+            brew install minisign
+          fi
+      - name: write the formula
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: bin/bump-latem-vault "$VERSION"
+      - name: install and test it
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          set -euo pipefail
+          # brew taps a committed tree, so commit here; nothing is pushed.
+          git add Formula/latem-vault.rb
+          git -c user.name=ci -c user.email=ci@localhost commit -qm "latem-vault $VERSION"
+          brew tap abyssinia-labs/tap "$GITHUB_WORKSPACE"
+          brew style abyssinia-labs/tap/latem-vault
+          brew install abyssinia-labs/tap/latem-vault
+          brew test abyssinia-labs/tap/latem-vault
+          brew audit --strict --online abyssinia-labs/tap/latem-vault
+          "$(brew --prefix)/bin/latem-vault" --version
+          "$(brew --prefix)/bin/openvault" --version
+
+  publish:
+    needs: [check, test]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq minisign
+      - name: write and push the formula
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          set -euo pipefail
+          bin/bump-latem-vault "$VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/latem-vault.rb
+          git commit -m "latem-vault $VERSION"
+          git push origin HEAD:main
