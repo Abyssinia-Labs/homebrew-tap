@@ -17,7 +17,8 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-15, ubuntu-24.04]
-        formula: [latem, latem-vault]
+        # latem-vault until bump-pinkvault's first run renames it to pinkvault.
+        formula: [latem, pinkvault, latem-vault]
     runs-on: ${{ matrix.os }}
     env:
       HOMEBREW_NO_AUTO_UPDATE: "1"
@@ -30,7 +31,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ ! -f "Formula/$FORMULA.rb" ]; then
-            echo "no $FORMULA formula yet: its bump workflow writes one from its first release"
+            echo "no Formula/$FORMULA.rb: its bump workflow writes it from a release, or renamed it"
             exit 0
           fi
           if [ "$RUNNER_OS" = Linux ]; then
