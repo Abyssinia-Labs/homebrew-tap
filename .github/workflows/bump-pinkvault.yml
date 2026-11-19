@@ -1,16 +1,20 @@
-# Write Formula/latem-vault.rb for the latest latem vault release, test it on
+# Write Formula/pinkvault.rb for the latest PinkVault release, test it on
 # macOS and Linux, and push it. bump.yml does the same for latem.
 #
-# bin/bump-latem-vault verifies the release's checksums manifest against
-# latem-vault.pub before it writes a single sha256, so the formula only
-# carries what latem vault's release key signed. The hourly check is one
-# GitHub API call and exits; the test and publish jobs run only when there is
-# a release to write.
+# bin/bump-pinkvault verifies the release's checksums manifest against
+# pinkvault.pub before it writes a single sha256, so the formula only carries
+# what PinkVault's release key signed. The hourly check is one GitHub API call
+# and exits; the test and publish jobs run only when there is a release to
+# write.
+#
+# The first time, the same change renames latem-vault to pinkvault
+# (bin/bump-pinkvault says how), so the test job first installs latem-vault
+# 0.6.0 and checks that brew update and brew upgrade take it to pinkvault.
 #
 # Pushes made with GITHUB_TOKEN start no workflow, so test.yml never sees this
 # job's commit: the test job below is that check, run before the push.
 
-name: bump-latem-vault
+name: bump-pinkvault
 
 on:
   schedule:
@@ -18,7 +22,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release to write, e.g. v0.6.1 (default: the latest)"
+        description: "Release to write, e.g. v0.7.1 (default: the latest)"
         required: false
         default: ""
 
@@ -41,7 +45,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
-        run: echo "version=$(bin/bump-latem-vault --check ${VERSION:+"$VERSION"})" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(bin/bump-pinkvault --check ${VERSION:+"$VERSION"})" >> "$GITHUB_OUTPUT"
 
   test:
     needs: check
@@ -68,28 +72,45 @@ jobs:
           else
             brew install minisign
           fi
+      - name: install latem-vault, to upgrade from
+        if: hashFiles('Formula/latem-vault.rb') != ''
+        run: |
+          set -euo pipefail
+          brew tap abyssinia-labs/tap "$GITHUB_WORKSPACE"
+          brew install abyssinia-labs/tap/latem-vault
+          echo "FROM_LATEM_VAULT=1" >> "$GITHUB_ENV"
       - name: write the formula
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.check.outputs.version }}
-        run: bin/bump-latem-vault "$VERSION"
+        run: bin/bump-pinkvault "$VERSION"
       - name: install and test it
         env:
           VERSION: ${{ needs.check.outputs.version }}
         run: |
           set -euo pipefail
           # brew taps a committed tree, so commit here; nothing is pushed.
-          git add Formula/latem-vault.rb
-          git -c user.name=ci -c user.email=ci@localhost commit -qm "latem-vault $VERSION"
-          brew tap abyssinia-labs/tap "$GITHUB_WORKSPACE"
-          brew style abyssinia-labs/tap/latem-vault
-          brew install abyssinia-labs/tap/latem-vault
-          brew test abyssinia-labs/tap/latem-vault
-          brew audit --strict --online abyssinia-labs/tap/latem-vault
-          "$(brew --prefix)/bin/latem-vault" --version
-          "$(brew --prefix)/bin/lv" --version
-          "$(brew --prefix)/bin/vlt" --version
-          "$(brew --prefix)/bin/openvault" --version
+          git add -A Formula formula_renames.json
+          git -c user.name=ci -c user.email=ci@localhost commit -qm "pinkvault $VERSION"
+          if [ -n "${FROM_LATEM_VAULT:-}" ]; then
+            # What a machine with latem-vault 0.6.0 does: brew update pulls
+            # the tap, sees the rename and moves the keg to pinkvault, then
+            # brew upgrade installs this release.
+            brew update
+            brew upgrade abyssinia-labs/tap/pinkvault
+            # The migrator leaves the old rack as a link to pinkvault's.
+            test -L "$(brew --cellar)/latem-vault"
+            "$(brew --prefix)/opt/pinkvault/bin/pinkvault" --version | grep -F "pinkvault $VERSION ("
+          else
+            brew tap abyssinia-labs/tap "$GITHUB_WORKSPACE"
+            brew install abyssinia-labs/tap/pinkvault
+          fi
+          brew style abyssinia-labs/tap/pinkvault
+          brew test abyssinia-labs/tap/pinkvault
+          brew audit --strict --online abyssinia-labs/tap/pinkvault
+          for name in pinkvault pink latem-vault openvault; do
+            "$(brew --prefix)/bin/$name" --version
+          done
 
   publish:
     needs: [check, test]
@@ -105,9 +126,9 @@ jobs:
           VERSION: ${{ needs.check.outputs.version }}
         run: |
           set -euo pipefail
-          bin/bump-latem-vault "$VERSION"
+          bin/bump-pinkvault "$VERSION"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Formula/latem-vault.rb
-          git commit -m "latem-vault $VERSION"
+          git add -A Formula formula_renames.json
+          git commit -m "pinkvault $VERSION"
           git push origin HEAD:main
